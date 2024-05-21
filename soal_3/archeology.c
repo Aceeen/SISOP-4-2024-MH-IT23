@@ -32,8 +32,8 @@ int fuze_getattr(const char *path, struct stat *statbuf)
         printf("Leaving fuze_getattr for /\n");
         return 0;
     }
-    char fpath[MAX_BUFFER];
-    sprintf(fpath, "%s%s", source_path, path);
+    char full_path[MAX_BUFFER];
+    sprintf(full_path, "%s%s", source_path, path);
     statbuf->st_mode = S_IFREG | 0644;
     statbuf->st_nlink = 1;
     statbuf->st_size = 0;
@@ -42,7 +42,7 @@ int fuze_getattr(const char *path, struct stat *statbuf)
     int i = 0;
     while (1)
     {
-        sprintf(apath, "%s.%03d", fpath, i++);
+        sprintf(apath, "%s.%03d", full_path, i++);
         fd = fopen(apath, "rb");
         if (!fd)
             break;
@@ -112,12 +112,12 @@ int fuze_read(const char *path, char *buffer, size_t sz, off_t os, struct fuse_f
         if (!fdir)
             break;
         fseek(fdir, 0L, SEEK_END);
-        size_t size_part = ftell(fdir);
+        size_t sz_part = ftell(fdir);
         fseek(fdir, 0L, SEEK_SET);
-        if (os >= size_part)
+        if (os >= sz_part)
         {
             printf("Skipping %s due to offset\n", apath);
-            os -= size_part;
+            os -= sz_part;
             fclose(fdir);
             continue;
         }
@@ -181,14 +181,91 @@ int fuze_create(const char *path, mode_t md, struct fuse_file_info *fi)
     (void)fi;
     char full_path[MAX_BUFFER];
     sprintf(full_path, "%s%s.000", source_path, path);
-    int res = creat(full_path, md);
-    if (res == -1)
+    int rez = creat(full_path, md);
+    if (rez == -1)
     {
         printf("Leaving fuze_create with error for %s\n", path);
         return -errno;
     }
-    close(res);
+    close(rez);
     printf("Leaving fuze_create for %s\n", path);
+    return 0;
+}
+
+int fuze_unlink(const char *path)
+{
+    char full_path[MAX_BUFFER];
+    char apath[MAX_BUFFER + 4];
+    sprintf(full_path, "%s%s", source_path, path);
+
+    int pcur = 0;
+    while (1)
+    {
+        sprintf(apath, "%s.%03d", full_path, pcur++);
+        int rez = unlink(apath);
+        if (rez == -1)
+        {
+            if (errno == ENOENT)
+                break;
+            return -errno;
+        }
+    }
+    return 0;
+}
+
+int fuze_truncate(const char *path, off_t sz)
+{
+    char full_path[MAX_BUFFER];
+    char apath[MAX_BUFFER + 4];
+    sprintf(full_path, "%s%s", source_path, path);
+    int pcurrent_t = 0;
+    size_t sz_part;
+    off_t sz_rmn = sz;
+    while (sz_rmn > 0)
+    {
+        sprintf(apath, "%s.%03d", full_path, pcurrent_t++);
+        if (sz_rmn > MAX_SPLIT)
+            sz_part = MAX_SPLIT;
+        else
+            sz_part = sz_rmn;
+        int rez = truncate(apath, sz_part);
+        if (rez == -1)
+            return -errno;
+        sz_rmn -= sz_part;
+    }
+    int pcurrent_u = 0;
+    while (1)
+    {
+        sprintf(apath, "%s.%03d", full_path, pcurrent_u++);
+        int rez = unlink(apath);
+        if (rez == -1)
+        {
+            if (errno == ENOENT)
+                break;
+            return -errno;
+        }
+    }
+    return 0;
+}
+
+int fuze_utimens(const char *path, const struct timespec tspec[2])
+{
+    char full_path[MAX_BUFFER];
+    sprintf(full_path, "%s%s", source_path, path);
+    char apath[MAX_BUFFER + 4];
+    int pcurrent = 0;
+    while (1)
+    {
+        sprintf(apath, "%s.%03d", full_path, pcurrent++);
+        int res = utimensat(AT_FDCWD, apath, tspec, 0);
+        if (res == -1)
+        {
+            if (errno == ENOENT)
+                break;
+            return -errno;
+        }
+    }
+
     return 0;
 }
 
@@ -201,5 +278,8 @@ int main(int argc, char *argv[])
     fuze_oper.read = fuze_read;
     fuze_oper.write = fuze_write;
     fuze_oper.create = fuze_create;
+    fuze_oper.unlink = fuze_unlink;
+    fuze_oper.truncate = fuze_truncate;
+    fuze_oper.utimens = fuze_utimens;
     return fuse_main(argc, argv, &fuze_oper, NULL);
 }
