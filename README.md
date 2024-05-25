@@ -376,3 +376,17 @@ int main(int argc, char *argv[])
 }
 ```
 Pada fungsi main kita melakukan inisialisasi FUSE dan memulai filesystemnya dengan operasi yang telah kita buat dengan cara mendefinisikan sebuah struktu 'fuse_operations' dengan pointer ke functions yang akan diimplementasikan lalu memanggil 'fuse_main' untuk memulai filesystem FUSE.
+
+Listing directory [nama_bebas]
+![image](https://github.com/v0rein/SISOP-4-2024-MH-IT23/assets/143814923/fae936fe-0124-4918-b2ab-6fb1aed78073)
+
+Hasil copy ke directory apapun dari [nama_bebas] dan memasukkan file ke [nama_bebas] lalu cek di directory relics
+![image](https://github.com/v0rein/SISOP-4-2024-MH-IT23/assets/143814923/6dbea102-8c6e-4d33-9fa5-a96fa980eb04)
+
+Delete file di [nama_bebas] maka fragment file di relics juga terhapus
+![image](https://github.com/v0rein/SISOP-4-2024-MH-IT23/assets/143814923/7725b979-a213-4ee2-8ea3-5f3f96826152)
+
+Cek directory report menggunakan samba share
+![image](https://github.com/v0rein/SISOP-4-2024-MH-IT23/assets/143814923/bd3bc3b7-d1c8-4eb4-a36b-4d1e6f019be0)
+
+
