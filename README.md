@@ -316,6 +316,142 @@ int main(int argc, char *argv[]) {
 Error : <br />
 ketika program dimount ke fuse, tidak ada fungsi yang berhasil berjalan dengan benar. Watermark tidak muncul pada gambar, isi file test juga tidak di reverse. <br />
 REVISI <br />
+```
+#define FUSE_USE_VERSION 31  
+#include <fuse.h>            
+#include <errno.h>           
+#include <dirent.h>          
+#include <stdio.h>           
+#include <stdlib.h>          
+#include <string.h>          
+#include <sys/stat.h>        
+#include <sys/types.h>       
+#include <unistd.h>          
+
+#define MAX_PATH_LENGTH 512 
+
+void apply_watermark(const char *src_path, const char *dst_path) {
+    char command[1024];  
+    snprintf(command, sizeof(command), "convert \"%s\" -gravity south -pointsize 36 -fill white -draw \"text 0,0 'inikaryakita.id'\" \"%s\"",
+             src_path, dst_path);
+    system(command); 
+}
+
+void reverse_file_content(const char *src_path, const char *dst_path) {
+    FILE *file = fopen(src_path, "r");  
+    // Membuka file sumber untuk membaca
+    FILE *outputFile = fopen(dst_path, "w");  
+    // Membuka file tujuan untuk write
+
+    if (file == NULL || outputFile == NULL) {  
+        // Memeriksa eror
+        perror("fopen");
+        return;
+    }
+
+    fseek(file, 0, SEEK_END);  
+    long fileSize = ftell(file);  
+    fseek(file, 0, SEEK_SET);  
+
+    char *content = malloc(fileSize + 1);  
+    fread(content, 1, fileSize, file);  
+    content[fileSize] = '\0';  
+
+    for (long i = fileSize - 1; i >= 0; i--) {  
+        fputc(content[i], outputFile);
+    }
+
+    free(content);  
+    fclose(file);  
+    fclose(outputFile);  
+}
+
+static int do_getattr(const char *path, struct stat *st) {
+    memset(st, 0, sizeof(struct stat));  
+    if (strcmp(path, "/") == 0 || strcmp(path, "/gallery") == 0 || strcmp(path, "/bahaya") == 0) {
+        st->st_mode = S_IFDIR | 0755;  
+        st->st_nlink = 2;  
+    } else {
+        st->st_mode = S_IFREG | 0644;  
+        st->st_nlink = 1;
+        st->st_size = 1024;
+    }
+    return 0;  
+}
+
+static int do_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+    (void)offset;  
+    (void)fi;      
+
+    if (strcmp(path, "/") == 0) {  
+        filler(buf, ".", NULL, 0);  
+        filler(buf, "..", NULL, 0);  
+        filler(buf, "gallery", NULL, 0);  
+        filler(buf, "bahaya", NULL, 0);  
+    } else if (strcmp(path, "/gallery") == 0 || strcmp(path, "/bahaya") == 0) { 
+        DIR *dp;
+        struct dirent *de;
+        if ((dp = opendir(path)) == NULL) { 
+            return -errno;
+        }
+        while ((de = readdir(dp)) != NULL) {  
+            filler(buf, de->d_name, NULL, 0);  
+        }
+        closedir(dp);  
+    }
+    return 0;  
+}
+
+static int do_open(const char *path, struct fuse_file_info *fi) {
+    return 0;  
+}
+
+static int do_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+    (void)fi;  
+
+    char src_path[MAX_PATH_LENGTH];  
+    char temp_path[MAX_PATH_LENGTH];  
+    snprintf(src_path, sizeof(src_path), ".%s", path);  
+
+    if (strstr(path, "/gallery/") == path) {  
+        snprintf(temp_path, sizeof(temp_path), "/tmp/watermarked%s", path + strlen("/gallery"));  
+        apply_watermark(src_path, temp_path);  
+        FILE *file = fopen(temp_path, "r");  
+        if (file == NULL) {
+            return -errno;  
+        }
+        fseek(file, offset, SEEK_SET);  
+        size_t bytes_read = fread(buf, 1, size, file);  
+        fclose(file);  
+        return bytes_read;  
+        snprintf(temp_path, sizeof(temp_path), "/tmp/reversed%s", path + strlen("/bahaya"));  
+        reverse_file_content(src_path, temp_path);  
+        FILE *file = fopen(temp_path, "r");  
+        if (file == NULL) {
+            return -errno;  
+        }
+        fseek(file, offset, SEEK_SET);  
+        size_t bytes_read = fread(buf, 1, size, file);  
+        fclose(file);  
+        return bytes_read;  
+    }
+    return -ENOENT;  
+    
+}
+
+static struct fuse_operations operations = {
+    .getattr = do_getattr,  
+    .readdir = do_readdir,  
+    .open = do_open,        
+    .read = do_read,        
+};
+
+int main(int argc, char *argv[]) {
+    mkdir("gallery", 0755); 
+    mkdir("bahaya", 0755);
+    return fuse_main(argc, argv, &operations, NULL);  
+}
+```
 
 
 ### SOAL 2
