@@ -455,233 +455,291 @@ int main(int argc, char *argv[]) {
 
 
 ### SOAL 2
+### REVISI
 
+### pastibisa.c
+
+1. Main Function (main): Fungsi utama ini memeriksa apakah argumen yang diberikan cukup. Jika tidak, fungsi ini menampilkan pesan cara penggunaan yang benar. Selanjutnya, fungsi ini memanggil fuse_main dengan argumen yang diberikan serta struktur fuse_operations (xmp_oper) untuk memulai operasi FUSE.
 ```
 #define FUSE_USE_VERSION 29
+
 #include <fuse.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <stdlib.h>
 #include <time.h>
+#include <fcntl.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <dirent.h>
 #include <ctype.h>
 
-// Variabel global
-static const char *base_dir = "/home/syahrhm/sisop4/sensitif";
-static const char *log_file = "/home/syahrhm/sisop4/logs-fuse.log";
-static const char *password = "bisatapimati";
+const char *base_dir = "/home/syahrhm/sisop4/sensitif";
+const char *log_file = "/home/syahrhm/sisop4/logs-fuse.log";
+const char *password = "bisatapimati";
 
-// Deklarasi fungsi
-void createLog(const char *status, const char *tag, const char *information);
-int checkPass();
 void decode_base64(const char *input, char *output);
 void decode_rot13(const char *input, char *output);
-void decode_hex(const char *input, char *output);
-void reverse(const char *input, char *output);
+char *decode_hex(const char *data);
+char *reverse(const char *data);
+void createLog(const char *status, const char *tag, const char *info);
+int checkPass();
 static int xmp_getattr(const char *path, struct stat *stbuf);
 static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi);
 static int xmp_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi);
 
 static struct fuse_operations xmp_oper = {
-    .getattr = xmp_getattr,
-    .readdir = xmp_readdir,
-    .read = xmp_read,
-}
+   .getattr = xmp_getattr,
+   .readdir = xmp_readdir,
+   .read = xmp_read,
+};
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
+    if (argc < 2) {
         fprintf(stderr, "Usage: %s <mountpoint>\n", argv[0]);
         return 1;
     }
     return fuse_main(argc, argv, &xmp_oper, NULL);
 }
+```
 
-void createLog(const char *status, const char *tag, const char *information) {
-    FILE *log = fopen(log_file, "a");
-    if (log == NULL) return;
+2. Get Attributes (xmp_getattr): Fungsi ini menyusun jalur file dengan menggabungkan base_dir dan path yang diberikan. Kemudian, atribut file diambil menggunakan lstat, dan hasilnya dikembalikan. Jika terjadi kesalahan saat mengambil atribut, kesalahan tersebut dikembalikan.
 
-    time_t now = time(NULL);
-    struct tm *t = localtime(&now);
-
-    fprintf(log, "[%s]::%02d/%02d/%04d-%02d:%02d:%02d::[%s]::[%s]\n",
-            status, t->tm_mday, t->tm_mon + 1, t->tm_year + 1900,
-            t->tm_hour, t->tm_min, t->tm_sec, tag, information);
-    fclose(log);
-}
-
-int checkPass() {
-    char input[100];
-    printf("Enter password: ");
-    scanf("%99s", input);
-    if (strcmp(input, password) == 0) {
-        createLog("SUCCESS", "checkPass", "Password correct");
-        return 1;
-    } else {
-        createLog("FAILED", "checkPass", "Password incorrect");
-        return 0;
-    }
-}
-
-void decode_base64(const char *input, char *output) {
-    const char b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    int input_len = strlen(input);
-    int i = 0, j = 0;
-    int output_len = 0;
-
-    unsigned char a3[3];
-    unsigned char a4[4];
-
-    while (input_len--) {
-        if (*input == '=') {
-            break;
-        }
-        a4[i++] = *(input++);
-        if (i == 4) {
-            for (i = 0; i < 4; i++) {
-                a4[i] = strchr(b64_table, a4[i]) - b64_table;
-            }
-
-            a3[0] = (a4[0] << 2) | (a4[1] >> 4);
-            a3[1] = ((a4[1] & 15) << 4) | (a4[2] >> 2);
-            a3[2] = ((a4[2] & 3) << 6) | a4[3];
-
-            for (i = 0; (i < 3); i++) {
-                output[output_len++] = a3[i];
-            }
-            i = 0;
-        }
-    }
-
-    if (i) {
-        for (j = i; j < 4; j++) {
-            a4[j] = '\0';
-        }
-
-        for (j = 0; j < 4; j++) {
-            a4[j] = strchr(b64_table, a4[j]) - b64_table;
-        }
-
-        a3[0] = (a4[0] << 2) | (a4[1] >> 4);
-        a3[1] = ((a4[1] & 15) << 4) | (a4[2] >> 2);
-        a3[2] = ((a4[2] & 3) << 6) | a4[3];
-
-        for (j = 0; (j < i - 1); j++) {
-            output[output_len++] = a3[j];
-        }
-    }
-    output[output_len] = '\0';
-}
-
-void decode_rot13(const char *input, char *output) {
-    for (int i = 0; input[i] != '\0'; i++) {
-        char c = input[i];
-        if (c >= 'a' && c <= 'z') {
-            output[i] = (c - 'a' + 13) % 26 + 'a';
-        } else if (c >= 'A' && c <= 'Z') {
-            output[i] = (c - 'A' + 13) % 26 + 'A';
-        } else {
-            output[i] = c;
-        }
-    }
-    output[strlen(input)] = '\0';
-}
-
-void decode_hex(const char *input, char *output) {
-    int len = strlen(input) / 2;
-    for (int i = 0; i < len; i++) {
-        sscanf(input + 2 * i, "%2hhx", &output[i]);
-    }
-    output[len] = '\0';
-}
-
-void reverse(const char *input, char *output) {
-    int len = strlen(input);
-    for (int i = 0; i < len; i++) {
-        output[i] = input[len - i - 1];
-    }
-    output[len] = '\0';
-}
-
+```
 static int xmp_getattr(const char *path, struct stat *stbuf) {
-    char fpath[1000];
-    sprintf(fpath, "%s%s", base_dir, path);
+    char fpath[512];
+    snprintf(fpath, sizeof(fpath), "%s%s", base_dir, path);
     int res = lstat(fpath, stbuf);
-    if (res == -1) return -errno;
+    if (res == -1) {
+        return -errno;
+    }
     return 0;
 }
+```
 
+3. Read Directory (xmp_readdir): Fungsi ini menyusun jalur direktori dengan menggabungkan base_dir dan path. Direktori kemudian dibuka menggunakan opendir. Jika direktori adalah /rahasia, kata sandi diperiksa menggunakan checkPass. Jika pemeriksaan kata sandi gagal, log dicatat dan kesalahan akses dikembalikan. Entitas direktori dibaca satu per satu dengan readdir, dan buffer diisi menggunakan filler. Direktori kemudian ditutup dan hasilnya dikembalikan.
+
+```
 static int xmp_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
-    DIR *dp;
-    struct dirent *de;
+    char fpath[512];
+    snprintf(fpath, sizeof(fpath), "%s%s", base_dir, path);
 
-    char fpath[1000];
-    sprintf(fpath, "%s%s", base_dir, path);
-
-    if (strncmp(path, "/rahasia", 8) == 0 && !checkPass()) {
-        return -EACCES;
+    DIR *dp = opendir(fpath);
+    if (dp == NULL) {
+        createLog("ERROR", "opendir", strerror(errno));
+        return -errno;
     }
 
-    dp = opendir(fpath);
-    if (dp == NULL) return -errno
-
-;
+    struct dirent *de;
+    int res = 0;
+    if (strncmp(path, "/rahasia", 8) == 0) {
+        if (!checkPass()) {
+            createLog("FAILED", "access", "Attempt to access rahasia folder with incorrect password");
+            closedir(dp);
+            return -EACCES; // Access denied if password is wrong
+        }
+    }
 
     while ((de = readdir(dp)) != NULL) {
         struct stat st;
         memset(&st, 0, sizeof(st));
         st.st_ino = de->d_ino;
         st.st_mode = de->d_type << 12;
-        if (filler(buf, de->d_name, &st, 0)) break;
+        res = filler(buf, de->d_name, &st, 0);
+        if (res != 0) {
+            createLog("ERROR", "filler", "Buffer full or error");
+            break;
+        }
     }
+
     closedir(dp);
     return 0;
 }
+```
 
+4. Read File (xmp_read): Fungsi ini menyusun jalur file dengan menggabungkan base_dir dan path. Jika file berada di dalam direktori /rahasia, kata sandi diperiksa menggunakan checkPass. Jika pemeriksaan gagal, log dicatat dan kesalahan akses dikembalikan. File dibuka menggunakan open dan isinya dibaca menggunakan pread ke buffer sementara decoded. Jika file berada dalam direktori /pesan/, konten didekode berdasarkan jenis enkode (base64, rot13, hex, atau reverse), dan log dicatat. File kemudian ditutup dan hasil pembacaan atau kesalahan dikembalikan.
+
+```
 static int xmp_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    char fpath[1000];
-    char decoded[1000];
-    sprintf(fpath, "%s%s", base_dir, path);
+    char fpath[512];
+    snprintf(fpath, sizeof(fpath), "%s%s", base_dir, path);
 
-    if (strncmp(path, "/rahasia", 8) == 0 && !checkPass()) {
-        return -EACCES;
+    if (strncmp(path, "/rahasia", 8) == 0) {
+        if (!checkPass()) {
+            createLog("FAILED", "access", "Attempt to access rahasia folder with incorrect password");
+            return -EACCES; 
+        } else {
+            createLog("SUCCESS", "access", "Attempt to access rahasia folder with correct password");
+        }
     }
 
     int fd = open(fpath, O_RDONLY);
-    if (fd == -1) return -errno;
-
-    int res = pread(fd, buf, size, offset);
-    if (res == -1) res = -errno;
-
-    close(fd);
-
-    if (strncmp(path, "/pesan/base64_", 14) == 0) {
-        buf[res] = '\0';  // Ensure the buffer is null-terminated
-        decode_base64(buf, decoded);
-        strcpy(buf, decoded);
-        res = strlen(decoded);
-    } else if (strncmp(path, "/pesan/rot13_", 13) == 0) {
-        buf[res] = '\0';  // Ensure the buffer is null-terminated
-        decode_rot13(buf, decoded);
-        strcpy(buf, decoded);
-        res = strlen(decoded);
-    } else if (strncmp(path, "/pesan/hex_", 11) == 0) {
-        buf[res] = '\0';  // Ensure the buffer is null-terminated
-        decode_hex(buf, decoded);
-        strcpy(buf, decoded);
-        res = strlen(decoded);
-    } else if (strncmp(path, "/pesan/rev_", 11) == 0) {
-        buf[res] = '\0';  // Ensure the buffer is null-terminated
-        reverse(buf, decoded);
-        strcpy(buf, decoded);
-        res = strlen(decoded);
+    if (fd == -1) {
+        return -errno;
     }
 
+    char decoded[1024];
+    int res = pread(fd, decoded, sizeof(decoded) - 1, offset);
+    if (res == -1) {
+        res = -errno;
+        createLog("FAILED", "readFile", strerror(errno));
+    } else {
+        decoded[res] = '\0';
+
+        if (strstr(path, "/pesan/") != NULL) {
+            if (strstr(path, "base64") != NULL) {
+                decode_base64(decoded, buf);
+                createLog("SUCCESS", "decodeFile", "Base64");
+            } else if (strstr(path, "rot13") != NULL) {
+                decode_rot13(decoded, buf);
+                createLog("SUCCESS", "decodeFile", "ROT13");
+            } else if (strstr(path, "hex") != NULL) {
+                char *decoded_hex = decode_hex(decoded);
+                strncpy(buf, decoded_hex, size);
+                free(decoded_hex);
+                createLog("SUCCESS", "decodeFile", "Hex");
+            } else if (strstr(path, "rev") != NULL) {
+                char *decoded_rev = reverse(decoded);
+                strncpy(buf, decoded_rev, size);
+                free(decoded_rev);
+                createLog("SUCCESS", "decodeFile", "Reverse");
+            } else {
+                strncpy(buf, decoded, size);
+                createLog("SUCCESS", "readFile", path);
+            }
+        } else {
+            strncpy(buf, decoded, size);
+        }
+    }
+
+    close(fd);
     return res;
-};
+}
 ```
+
+5. Base64 Decode (decode_base64): Fungsi ini mendekode string yang dienkode base64 menjadi format aslinya. Fungsi ini menggunakan tabel karakter base64 untuk mengonversi setiap karakter input menjadi karakter yang didekodekan.
+
+```
+void decode_base64(const char *input, char *output) {
+    static const char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    int i, j = 0;
+    unsigned char k;
+    int len = strlen(input);
+
+    for (i = 0; i < len; i += 4) {
+        k = strchr(base64_chars, input[i]) - base64_chars;
+        k = (k << 2) | ((strchr(base64_chars, input[i + 1]) - base64_chars) >> 4);
+        output[j++] = k;
+
+        if (input[i + 2] != '=') {
+            k = ((strchr(base64_chars, input[i + 1]) - base64_chars) << 4) | ((strchr(base64_chars, input[i + 2]) - base64_chars) >> 2);
+            output[j++] = k;
+        }
+
+        if (input[i + 3] != '=') {
+            k = ((strchr(base64_chars, input[i + 2]) - base64_chars) << 6) | (strchr(base64_chars, input[i + 3]) - base64_chars);
+            output[j++] = k;
+        }
+    }
+
+    output[j] = '\0';
+}
+```
+
+6. ROT13 Decode (decode_rot13): Fungsi ini mendekode string yang dienkode ROT13 menjadi format aslinya. Fungsi ini menggeser setiap karakter alfabet sebanyak 13 posisi dalam alfabet, mengembalikan karakter asli.
+
+```
+void decode_rot13(const char *data, char *decoded) {
+    int i;
+    int len = strlen(data);
+    for (i = 0; i < len; i++) {
+        if (isalpha(data[i])) {
+            if (islower(data[i])) {
+                decoded[i] = ((data[i] - 'a' + 13) % 26) + 'a';
+            } else {
+                decoded[i] = ((data[i] - 'A' + 13) % 26) + 'A';
+            }
+        } else {
+            decoded[i] = data[i];
+        }
+    }
+    decoded[len] = '\0';
+}
+```
+
+7. Hex Decode (decode_hex): Fungsi ini mendekode string yang dienkode hex menjadi format aslinya. Fungsi ini mengalokasikan memori untuk string yang didekode dan mengembalikan pointer ke string tersebut, yang didekodekan dengan membaca setiap pasangan karakter heksadesimal.
+
+```
+char *decode_hex(const char *data) {
+    size_t len = strlen(data) / 2;
+    char *decoded = malloc(len + 1);
+    for (size_t i = 0; i < len; i++) {
+        sscanf(data + 2 * i, "%2hhx", &decoded[i]);
+    }
+    decoded[len] = '\0';
+    return decoded;
+}
+```
+
+8. Reverse (reverse): Fungsi ini membalikkan string yang diberikan. Fungsi ini mengalokasikan memori untuk string yang dibalik dan mengembalikan pointer ke string tersebut dengan menyalin karakter dari belakang ke depan.
+
+```
+char *reverse(const char *data) {
+    size_t len = strlen(data);
+    char *reversed = malloc(len + 1);
+    for (size_t i = 0; i < len; i++) {
+        reversed[i] = data[len - 1 - i];
+    }
+    reversed[len] = '\0';
+    return reversed;
+}
+```
+
+9. Create Log (createLog): Fungsi ini membuka file log untuk menambahkan entri baru. Fungsi ini menulis log dengan format yang mencakup status, tag, informasi, dan waktu saat log dibuat. Setelah menulis log, fungsi ini menutup file log.
+
+```
+void createLog(const char *status, const char *tag, const char *info) {
+    FILE *log_fp = fopen(log_file, "a");
+    if (log_fp) {
+        time_t now = time(NULL);
+        struct tm *t = localtime(&now);
+        fprintf(log_fp, "[%s]::%02d/%02d/%04d-%02d:%02d:%02d::[%s]::[%s]\n",
+                status,
+                t->tm_mday, t->tm_mon + 1, t->tm_year + 1900,
+                t->tm_hour, t->tm_min, t->tm_sec,
+                tag, info);
+        fclose(log_fp);
+    }
+}
+```
+
+10. Check Password (checkPass): Fungsi ini meminta pengguna untuk memasukkan kata sandi dan memeriksa apakah kata sandi yang dimasukkan cocok dengan kata sandi yang ditentukan (password). Berdasarkan hasil pemeriksaan, log dicatat dan fungsi ini mengembalikan hasil pemeriksaan.
+
+```
+int checkPass() {
+    char input[256];
+    printf("Enter password: ");
+    scanf("%255s", input);
+    if (strcmp(input, password) == 0) {
+        createLog("SUCCESS", "access", "Password correct");
+        return 1;
+    } else {
+        createLog("FAILED", "access", "Incorrect password attempt");
+        return 0;
+    }
+}
+```
+
+- Berikut dokumentasi ketika PASTIBISA.C di jalankan :
+  
+- dokumentasi ketika file berhasil di pindahkan ke folder kosong dan dapat mengenkripsi isi file
+![Screenshot 2024-05-25 225149](https://github.com/Aceeen/Sisop-4-2024-MH-IT23/assets/151058945/7af3b71f-a33b-4f20-aad8-bb7685a2b9ad)
+
+- dokumentasi bahwa gagal membuka folder rahasia-berkas dan berhasil menampilkan log
+![Screenshot 2024-05-25 225233](https://github.com/Aceeen/Sisop-4-2024-MH-IT23/assets/151058945/a014d841-5c57-44a4-bb1c-eeb310d6ffe8)
+
 
 ### Soal 3
 [archeology.c]
